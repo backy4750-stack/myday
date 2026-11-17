@@ -163,6 +163,14 @@ textarea.sm{min-height:70px}
 .col-all .a b{display:block;font-size:13px;margin-bottom:4px}
 .col-all .a p{font-size:14px;line-height:1.7;white-space:pre-wrap}
 .filebtn{display:inline-block;cursor:pointer}
+.blk{padding:12px 0;border-bottom:1px solid var(--line)}
+.blk:last-child{border-bottom:0}
+.blk .bh{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.blk .bh b{font-size:15px}
+.blk .bh span{font-size:12px;color:var(--sub)}
+.blk.now{border-left:3px solid var(--ink);padding-left:10px;margin-left:-14px;padding-right:0}
+.blk .ev .tm{min-width:38px}
+.nowtag{font-size:11px;background:var(--ink);color:#fff;padding:1px 7px;border-radius:99px;margin-left:auto}
 .fb{display:block;width:100%;margin-top:8px;font-size:12px;min-height:80px}
 </style>
 </head>
@@ -183,7 +191,7 @@ function norm(){
   S.events=S.events||{}; S.diary=S.diary||{}; S.habits=S.habits||[];
   S.att=S.att||{start:'2026-09-01',end:'2026-12-19',subjects:[],rec:{}};
   S.att.rec=S.att.rec||{}; S.att.subjects=S.att.subjects||[];
-  S.plans=S.plans||{}; S.plans.weeks=S.plans.weeks||{}; S.plans.months=S.plans.months||{};
+  S.plans=S.plans||{}; S.plans.weeks=S.plans.weeks||{}; S.plans.months=S.plans.months||{};S.plans.days=S.plans.days||{};
   S.goals=S.goals||[];
   S.collect=S.collect||{items:{}};S.collect.items=S.collect.items||{};
 }
@@ -215,7 +223,7 @@ const ymAdd=(ym,n)=>{const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-
 const ymLabel=ym=>{const [y,m]=ym.split('-').map(Number);return y+'년 '+m+'월';};
 const daysIn=ym=>{const [y,m]=ym.split('-').map(Number);return new Date(y,m,0).getDate();};
 
-let UI={tab:'cal',sel:TODAY,ym:TODAY.slice(0,7),planView:'week',hm:TODAY.slice(0,7),attEdit:false,open:null,dv:'diary',colN:0,colView:'one',colSec:-1,imOpen:false};
+let UI={tab:'cal',sel:TODAY,ym:TODAY.slice(0,7),planView:'day',hm:TODAY.slice(0,7),attEdit:false,open:null,dv:'diary',colN:0,colView:'one',colSec:-1,imOpen:false};
 try{const u=JSON.parse(sessionStorage.getItem('myday-ui')||'null');if(u)UI=Object.assign(UI,u);}catch(e){}
 const saveUI=()=>{try{sessionStorage.setItem('myday-ui',JSON.stringify(UI));}catch(e){}};
 let draft=null, delArm=null, aiBusy=false, aiLive='';
@@ -316,7 +324,7 @@ function renderCal(){
     <button class="chip" data-act="tab" data-t="diary">${di&&(di.mood||di.text)?'일기 보기':'일기 쓰기'}</button>
     <button class="chip" data-act="tab" data-t="habit">습관 ${done}/${S.habits.length}</button>
     ${cls.length?`<button class="chip" data-act="tab" data-t="att">출결 ${marked}/${cls.length}</button>`:''}
-    <button class="chip" data-act="tab" data-t="plan">주간 계획</button>
+    <button class="chip" data-act="tab" data-t="plan">하루 계획</button>
     <button class="chip" data-act="colToday">올해의 나</button></div></div>`+backupCard();
 }
 function backupCard(){
@@ -435,8 +443,29 @@ function renderAtt(){
 // ---------- plan ----------
 function weekDates(mon){return [...Array(7)].map((_,i)=>addDays(mon,i));}
 function renderPlan(){
-  const seg=`<div class="seg"><button class="${UI.planView==='week'?'on':''}" data-act="pv" data-v="week">주간 계획</button><button class="${UI.planView==='month'?'on':''}" data-act="pv" data-v="month">한 달 계획</button></div>`;
-  return UI.planView==='week'?renderWeek(seg):renderMonth(seg);
+  const seg=`<div class="seg"><button class="${UI.planView==='day'?'on':''}" data-act="pv" data-v="day">하루</button><button class="${UI.planView==='week'?'on':''}" data-act="pv" data-v="week">주간</button><button class="${UI.planView==='month'?'on':''}" data-act="pv" data-v="month">한 달</button></div>`;
+  return UI.planView==='day'?renderDay(seg):UI.planView==='week'?renderWeek(seg):renderMonth(seg);
+}
+const BLOCKS=[{n:'새벽',r:'0~6시',s:0,e:6},{n:'오전',r:'6~12시',s:6,e:12},{n:'오후',r:'12~18시',s:12,e:18},{n:'저녁',r:'18~24시',s:18,e:24}];
+const dayObj=d=>{const o=S.plans.days[d]||(S.plans.days[d]={blocks:[[],[],[],[]],note:''});o.blocks=o.blocks||[[],[],[],[]];return o;};
+function renderDay(seg){
+  const d=UI.sel,o=S.plans.days[d]||{blocks:[[],[],[],[]],note:''};
+  const all=o.blocks.flat(),done=all.filter(x=>x.done).length;
+  const nowH=new Date().getHours(),evs=S.events[d]||[];
+  const wi=(parse(d).getDay()+6)%7,wt=(S.plans.weeks[monday(d)]||{tasks:[]}).tasks.filter(t=>t.day===wi);
+  const cls=classesOn(d);
+  return dayNav()+seg+`<div class="card"><h2>오늘 계획 <small>${done}/${all.length} 완료</small></h2><div class="prog"><i style="width:${all.length?done/all.length*100:0}%"></i></div>
+    ${cls.length||wt.length?`<div class="muted" style="margin-top:8px">${cls.length?'수업: '+cls.map(c=>esc(c.name)).join(', '):''}${cls.length&&wt.length?' · ':''}${wt.length?'주간 할 일 '+wt.length+'개 배정됨':''}</div>`:''}</div>
+  <div class="card">${BLOCKS.map((b,i)=>{const isNow=d===TODAY&&nowH>=b.s&&nowH<b.e;
+    const be=evs.filter(e=>{if(!e.time)return false;const h=+e.time.slice(0,2);return h>=b.s&&h<b.e;}).sort((x,y)=>x.time.localeCompare(y.time));
+    const items=o.blocks[i]||[];
+    return `<div class="blk ${isNow?'now':''}"><div class="bh"><b>${b.n}</b><span>${b.r}</span>${isNow?'<span class="nowtag">지금</span>':''}</div>
+      ${be.map(e=>`<div class="ev"><span class="tm">${e.time}</span><span class="tx muted">${esc(e.text)} · 일정</span></div>`).join('')}
+      ${items.map(x=>`<div class="task"><button class="chk s ${x.done?'on':''}" data-act="dDone" data-b="${i}" data-id="${x.id}">${x.done?'✓':''}</button><div class="tx" style="${x.done?'text-decoration:line-through;color:var(--sub)':''}">${esc(x.text)}</div><button class="x" data-act="dDel" data-b="${i}" data-id="${x.id}">×</button></div>`).join('')}
+      <div class="row" style="margin-top:6px"><input id="dIn${i}" placeholder="${b.n}에 할 일" enterkeyhint="done"><button class="btn ghost" data-act="dAdd" data-b="${i}">추가</button></div></div>`}).join('')}
+    ${evs.filter(e=>!e.time).length?`<div class="muted" style="margin-top:8px">종일 일정: ${evs.filter(e=>!e.time).map(e=>esc(e.text)).join(', ')}</div>`:''}</div>
+  ${wt.length?`<div class="card"><h2>주간 계획에서 오늘 할 일</h2>${wt.map(t=>`<div class="task"><button class="chk s ${t.done?'on':''}" data-act="tDone" data-id="${t.id}">${t.done?'✓':''}</button><div class="tx" style="${t.done?'text-decoration:line-through;color:var(--sub)':''}">${esc(t.text)}</div><span class="muted">${t.h||0}h</span></div>`).join('')}</div>`:''}
+  <div class="card"><h2>하루 메모</h2><textarea class="sm" data-ch="dNote" placeholder="오늘의 다짐, 회고 등">${esc(o.note||'')}</textarea></div>`;
 }
 function aiCard(mode,obj){
   if(!sample)return `<div class="card ai"><h2>AI 비서</h2><div class="muted">${STANDALONE?'오프라인 앱에서는 AI가 직접 답할 수 없어요.':'AI 비서를 불러오는 중이거나 쓸 수 없는 환경이에요.'} ‘질문 복사’를 누르고 Claude 앱에 붙여넣으면 같은 점검을 받을 수 있어요.</div>
@@ -628,6 +657,9 @@ const A={
   delSubj:t=>{const id=t.dataset.id;if(delArm!==id){delArm=id;return;}S.att.subjects=S.att.subjects.filter(s=>s.id!==id);Object.keys(S.att.rec).forEach(k=>{if(k.startsWith(id+'|'))delete S.att.rec[k];});delArm=null;persist();},
   // plan
   pv:t=>{UI.planView=t.dataset.v;},
+  dAdd:t=>{const b=+t.dataset.b,el=document.getElementById('dIn'+b);const tx=el?el.value.trim():'';if(!tx)return false;dayObj(UI.sel).blocks[b].push({id:uid(),text:tx,done:false});persist();},
+  dDone:t=>{const x=dayObj(UI.sel).blocks[+t.dataset.b].find(z=>z.id===t.dataset.id);if(x){x.done=!x.done;persist();}},
+  dDel:t=>{const o=dayObj(UI.sel),b=+t.dataset.b;o.blocks[b]=o.blocks[b].filter(z=>z.id!==t.dataset.id);persist();},
   goWeek:t=>{setSel(t.dataset.d);UI.planView='week';window.scrollTo(0,0);},
   tAdd:()=>{const tx=document.getElementById('tText').value.trim();if(!tx)return false;weekObj(monday(UI.sel)).tasks.push({id:uid(),text:tx,h:+document.getElementById('tH').value||0,day:-1,done:false});persist();},
   tDone:t=>{const x=weekObj(monday(UI.sel)).tasks.find(z=>z.id===t.dataset.id);x.done=!x.done;persist();},
@@ -654,12 +686,14 @@ app.addEventListener('change',async e=>{
   const c=el.dataset.ch;if(!c)return;
   if(c==='avail'){weekObj(monday(UI.sel)).avail[+el.dataset.i]=Math.max(0,+el.value||0);persist();render();}
   else if(c==='tDay'){const x=weekObj(monday(UI.sel)).tasks.find(z=>z.id===el.dataset.id);x.day=+el.value;persist();render();}
+  else if(c==='dNote'){dayObj(UI.sel).note=el.value;persist();}
   else if(c==='colText'){colSetText(+el.dataset.n,el.value);persist();}
   else if(c==='memo'){const o=el.dataset.mode==='week'?weekObj(monday(UI.sel)):monthObj(UI.ym);o.memo=el.value;persist();}
 });
 app.addEventListener('keydown',e=>{
   if(e.key!=='Enter'||e.isComposing)return;
   const map={evText:'addEv',hName:'addHabit',sName:'addSubj',tH:'tAdd',mgText:'mgAdd',gText:'gAdd'};
+  if(/^dIn\d$/.test(e.target.id)){if(A.dAdd({dataset:{b:e.target.id.slice(3)}})!==false)render();return;}
   if(e.target.id==='tText'){document.getElementById('tH').focus();return;}
   if(map[e.target.id]){if(A[map[e.target.id]]()!==false)render();}
 });
